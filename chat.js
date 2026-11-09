@@ -43,7 +43,7 @@ You are a strict but encouraging French writing coach for a student preparing TC
 - Never give the corrected version before she has worked through the errors herself, even if she asks. Tell her it comes at the end.
 `;
 
-// Uses Netlify's AI Gateway when available, otherwise the Google Gemini API directly.
+// Uses your own GEMINI_API_KEY (Google free tier) if set, otherwise Netlify's AI Gateway.
 
 const MAX_MESSAGES = 60;        // keep the conversation a reasonable size
 const MAX_CHARS = 8000;         // per message
@@ -81,18 +81,29 @@ async function runCoach(body, passwordHeader) {
   const base = (process.env.GOOGLE_GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
   const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: clean.map(m => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      })),
-      generationConfig: { maxOutputTokens: 8192, temperature: 0.4 },
-    }),
-  });
+  // Keep the model's "thinking" short so the reply arrives before Netlify's time limit.
+  // Newer models use thinkingLevel, older ones thinkingBudget; if one is rejected, try the next.
+  const thinkingOptions = [{ thinkingLevel: "low" }, { thinkingBudget: 0 }, null];
+  let res;
+  for (const thinking of thinkingOptions) {
+    const generationConfig = { maxOutputTokens: 4096, temperature: 0.4 };
+    if (thinking) generationConfig.thinkingConfig = thinking;
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: clean.map(m => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        })),
+        generationConfig,
+      }),
+    });
+    if (res.status !== 400) break;
+    const err = await res.clone().json().catch(() => ({}));
+    if (!/think/i.test(err?.error?.message || "")) break;
+  }
 
   const data = await res.json().catch(() => ({}));
 
