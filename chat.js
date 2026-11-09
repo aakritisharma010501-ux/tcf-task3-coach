@@ -43,7 +43,7 @@ You are a strict but encouraging French writing coach for a student preparing TC
 - Never give the corrected version before she has worked through the errors herself, even if she asks. Tell her it comes at the end.
 `;
 
-// Uses the Google Gemini API free tier (no credit card needed).
+// Uses Netlify's AI Gateway when available, otherwise the Google Gemini API directly.
 
 const MAX_MESSAGES = 60;        // keep the conversation a reasonable size
 const MAX_CHARS = 8000;         // per message
@@ -76,7 +76,10 @@ async function runCoach(body, passwordHeader) {
   }
 
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  // On Netlify, the AI Gateway provides GOOGLE_GEMINI_BASE_URL together with its own GEMINI_API_KEY.
+  // If you set your own GEMINI_API_KEY, Netlify leaves both alone and requests go straight to Google.
+  const base = (process.env.GOOGLE_GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
+  const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const res = await fetch(url, {
     method: "POST",
