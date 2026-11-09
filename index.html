@@ -130,7 +130,9 @@
     outline: none;
   }
   textarea:focus { border-color: var(--accent); background: #fff; }
-  .hint { max-width: 760px; margin: 6px auto 0; font-size: 12px; color: var(--muted); }
+  .hint { max-width: 760px; margin: 6px auto 0; font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; }
+  .count { font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .count.ok { color: #1a7f37; }
 
   .overlay {
     position: fixed; inset: 0; background: rgba(20, 24, 33, .45);
@@ -171,8 +173,9 @@
     <div class="intro" id="intro">
       <h2>How it works</h2>
       <ol>
-        <li>Write the <strong>topic</strong>, then your <strong>full answer</strong> in French. Send them together in one message.</li>
-        <li>The coach marks your mistakes. You <strong>correct them yourself</strong>, and it won't give you the answer.</li>
+        <li>Write the <strong>topic</strong>, then your <strong>full answer</strong> in French: <strong>at least 400 words</strong> (about 4 minutes spoken) and <strong>at least 5 connectors</strong>. Send them together in one message.</li>
+        <li>Follow this plan: introduction (the two opinions) → my opinion → argument 1 → argument 2 → problem → solution → conclusion.</li>
+        <li>The coach first checks your length, connectors and plan. Then it marks your mistakes. You <strong>correct them yourself</strong>, and it won't give you the answer.</li>
         <li>Sometimes it asks you to explain an idea in English.</li>
         <li>At the end, you get your <strong>3 most frequent errors</strong> and your <strong>corrected version</strong>. Learn it by heart and say it aloud without reading.</li>
       </ol>
@@ -188,7 +191,7 @@
     <textarea id="input" rows="2" placeholder="Sujet : …&#10;&#10;Ma réponse : …"></textarea>
     <button class="primary" id="sendBtn">Send</button>
   </div>
-  <div class="hint">Press Ctrl + Enter (⌘ + Enter on Mac) to send.</div>
+  <div class="hint"><span>Press Ctrl + Enter (⌘ + Enter on Mac) to send.</span><span class="count" id="count"></span></div>
 </footer>
 
 <div class="overlay" id="pwOverlay">
@@ -312,6 +315,18 @@
   function autoGrow() {
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + "px";
+    updateCount();
+  }
+
+  // Live word count of the answer (the part after "Ma réponse :" if present).
+  const countEl = document.getElementById("count");
+  function updateCount() {
+    const t = input.value;
+    const m = t.match(/ma\s+réponse\s*:([\s\S]*)/i);
+    const words = ((m ? m[1] : t).match(/[A-Za-zÀ-ÿ0-9]+(?:['’-][A-Za-zÀ-ÿ0-9]+)*/g) || []).length;
+    if (!words) { countEl.textContent = ""; countEl.className = "count"; return; }
+    countEl.textContent = words + " words · ≈ " + (words / 100).toFixed(1) + " min (target: 400 words ≈ 4 min)";
+    countEl.className = "count" + (words >= 400 ? " ok" : "");
   }
 
   // ---- talking to the server ----
