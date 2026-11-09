@@ -1,0 +1,8 @@
+{
+  "name": "tcf-task3-coach",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TCF Canada Task 3 writing coach",
+  "engines": { "node": ">=18" }
+}
