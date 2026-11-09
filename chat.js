@@ -75,7 +75,7 @@ async function runCoach(body, passwordHeader) {
     return { status: 400, data: { error: "The last message must come from the student." } };
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const model = process.env.GEMINI_MODEL || (process.env.GOOGLE_GEMINI_BASE_URL ? "gemini-3.8-flash" : "gemini-flash-latest");
   // On Netlify, the AI Gateway provides GOOGLE_GEMINI_BASE_URL together with its own GEMINI_API_KEY.
   // If you set your own GEMINI_API_KEY, Netlify leaves both alone and requests go straight to Google.
   const base = (process.env.GOOGLE_GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
