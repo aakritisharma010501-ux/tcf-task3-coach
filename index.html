@@ -173,7 +173,7 @@
     <div class="intro" id="intro">
       <h2>How it works</h2>
       <ol>
-        <li>Write the <strong>topic</strong>, then your <strong>full answer</strong> in French: <strong>at least 400 words</strong> (about 4 minutes spoken) and <strong>at least 5 connectors</strong>. Send them together in one message.</li>
+        <li>Write the <strong>topic</strong>, then your <strong>full answer</strong> in French: <strong>at least 300 words</strong> (about 3 minutes spoken) and <strong>at least 5 connectors</strong>. Send them together in one message.</li>
         <li>Follow this plan: introduction (the two opinions) → my opinion → argument 1 → argument 2 → problem → solution → conclusion.</li>
         <li>The coach first checks your length, connectors and plan. Then it marks your mistakes. You <strong>correct them yourself</strong>, and it won't give you the answer.</li>
         <li>Sometimes it asks you to explain an idea in English.</li>
@@ -325,8 +325,8 @@
     const m = t.match(/ma\s+réponse\s*:([\s\S]*)/i);
     const words = ((m ? m[1] : t).match(/[A-Za-zÀ-ÿ0-9]+(?:['’-][A-Za-zÀ-ÿ0-9]+)*/g) || []).length;
     if (!words) { countEl.textContent = ""; countEl.className = "count"; return; }
-    countEl.textContent = words + " words · ≈ " + (words / 100).toFixed(1) + " min (target: 400 words ≈ 4 min)";
-    countEl.className = "count" + (words >= 400 ? " ok" : "");
+    countEl.textContent = words + " words · ≈ " + (words / 100).toFixed(1) + " min (target: 300 words ≈ 3 min)";
+    countEl.className = "count" + (words >= 300 ? " ok" : "");
   }
 
   // ---- talking to the server ----
