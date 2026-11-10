@@ -122,42 +122,64 @@ async function runCoach(body, passwordHeader) {
     last.content += `\n\n[Automatic check – added by the app, not written by the student: word count = ${words} (≈ ${(words / 100).toFixed(1)} min spoken); connectors found = ${found.length}${found.length ? " (" + found.join(", ") + ")" : ""}.]`;
   }
 
-  const model = process.env.GEMINI_MODEL || (process.env.GOOGLE_GEMINI_BASE_URL ? "gemini-3.8-flash" : "gemini-flash-latest");
   // On Netlify, the AI Gateway provides GOOGLE_GEMINI_BASE_URL together with its own GEMINI_API_KEY.
   // If you set your own GEMINI_API_KEY, Netlify leaves both alone and requests go straight to Google.
+  const gateway = !!process.env.GOOGLE_GEMINI_BASE_URL;
   const base = (process.env.GOOGLE_GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
-  const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
-  // Keep the model's "thinking" short so the reply arrives before Netlify's time limit.
+  // The first model is tried first. When Google says a model is busy (or unavailable),
+  // the next one is tried automatically, so the student rarely sees a "high demand" error.
+  const preferred = process.env.GEMINI_MODEL || (gateway ? "gemini-3.8-flash" : "gemini-flash-lite-latest");
+  const backups = gateway
+    ? ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
+    : ["gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash"];
+  const models = [preferred, ...backups.filter(m => m !== preferred)];
+
+  const contents = clean.map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  // One model, with short "thinking" so the reply arrives before Netlify's time limit.
   // Newer models use thinkingLevel, older ones thinkingBudget; if one is rejected, try the next.
-  const thinkingOptions = [{ thinkingLevel: "low" }, { thinkingBudget: 0 }, null];
-  let res;
-  for (const thinking of thinkingOptions) {
-    const generationConfig = { maxOutputTokens: 4096, temperature: 0.4 };
-    if (thinking) generationConfig.thinkingConfig = thinking;
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: clean.map(m => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        })),
-        generationConfig,
-      }),
-    });
-    if (res.status !== 400) break;
-    const err = await res.clone().json().catch(() => ({}));
-    if (!/think/i.test(err?.error?.message || "")) break;
+  async function ask(model) {
+    const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+    let r;
+    for (const thinking of [{ thinkingLevel: "low" }, { thinkingBudget: 0 }, null]) {
+      const generationConfig = { maxOutputTokens: 4096, temperature: 0.4 };
+      if (thinking) generationConfig.thinkingConfig = thinking;
+      r = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }, contents, generationConfig }),
+      });
+      if (r.status !== 400) break;
+      const err = await r.clone().json().catch(() => ({}));
+      if (!/think/i.test(err?.error?.message || "")) break;
+    }
+    return r;
   }
 
-  const data = await res.json().catch(() => ({}));
+  const startedAt = Date.now();
+  let res, data = {};
+  for (const model of models) {
+    if (Date.now() - startedAt > 18000) break;          // stay inside Netlify's time limit
+    try { res = await ask(model); } catch (e) { continue; }
+    data = await res.json().catch(() => ({}));
+    if (res.ok) break;
+    const busy = [429, 500, 503, 504].includes(res.status) || res.status === 404 ||
+      /high demand|overloaded|unavailable|not found/i.test(data?.error?.message || "");
+    if (!busy) break;                                   // a real error (e.g. bad key): stop and report it
+    await new Promise(r => setTimeout(r, 800));
+  }
 
-  if (res.status === 429) {
-    return { status: 429, data: { error: "The free limit was reached for now. Wait a minute and press Send again (or try again tomorrow if it keeps happening)." } };
+  if (!res) {
+    return { status: 503, data: { error: "The coach is very busy right now. Please wait a minute and press Send again." } };
   }
   if (!res.ok) {
+    if ([429, 500, 503, 504].includes(res.status) || /high demand|overloaded|unavailable/i.test(data?.error?.message || "")) {
+      return { status: 503, data: { error: "The coach is very busy right now. Please wait a minute and press Send again." } };
+    }
     const msg = data?.error?.message || `Gemini API error (${res.status}).`;
     return { status: 502, data: { error: msg } };
   }
