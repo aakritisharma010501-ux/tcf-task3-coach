@@ -87,7 +87,7 @@ export default async (req) => {
         try {
           while (true) {
             const { value, done } = await reader.read();
-            if (done) break;
+            if (done) { if (buf.trim()) send("\n\n[[LEFTOVER]]" + buf.length); break; }
             buf += dec.decode(value, { stream: true });
             let i;
             while ((i = buf.indexOf("\n")) >= 0) {
@@ -102,7 +102,7 @@ export default async (req) => {
             }
           }
         } catch (e) {
-          if (got) { controller.close(); return; }
+          send("\n\n[[STREAMERR]]" + (e && (e.name + ": " + e.message))); controller.close(); return;
         }
         if (got) { controller.close(); return; }
         lastErr = "The coach gave an empty answer. Please press Send again.";
