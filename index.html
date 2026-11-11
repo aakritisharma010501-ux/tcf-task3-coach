@@ -330,16 +330,6 @@
   }
 
   // ---- talking to the server ----
-  async function callCoach() {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-app-password": password },
-      body: JSON.stringify({ messages })
-    });
-    const data = await res.json().catch(() => ({}));
-    return { status: res.status, data };
-  }
-
   async function send() {
     const text = input.value.trim();
     if (!text || busy) return;
@@ -352,26 +342,72 @@
     await requestReply();
   }
 
+  // If a reply fails, take the student's last message back out of the chat and put it in the box,
+  // so pressing Send simply tries again.
+  function giveBackLastMessage(errorText) {
+    if (messages.length && messages[messages.length - 1].role === "user") {
+      const lastMsg = messages.pop();
+      save(STORE_KEY, JSON.stringify(messages));
+      renderAll();
+      input.value = lastMsg.content;
+      autoGrow();
+    }
+    addBubble("assistant", errorText, "error");
+  }
+
   async function requestReply() {
     setBusy(true);
     const typing = addTyping();
+    let wrap = null, text = "";
+    const ERR = "[[ERROR]]";
     try {
-      const { status, data } = await callCoach();
-      typing.remove();
-      if (status === 401) {
+      const res = await fetch("/api/coach", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-app-password": password },
+        body: JSON.stringify({ messages })
+      });
+      if (res.status === 401) {
+        typing.remove();
         askPassword(password ? "Wrong password. Try again." : "");
         return;
       }
-      if (status !== 200 || !data.reply) {
-        addBubble("assistant", (data && data.error) || "Something went wrong. Please try again.", "error");
+      const type = res.headers.get("content-type") || "";
+      if (!res.ok || !type.includes("text/plain") || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        typing.remove();
+        giveBackLastMessage((data && data.error) || "Something went wrong. Please press Send again.");
         return;
       }
-      messages.push({ role: "assistant", content: data.reply });
+      // Show the reply as it arrives.
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        text += dec.decode(value, { stream: true });
+        if (text.startsWith(ERR) || ERR.startsWith(text)) continue;
+        if (!wrap) { typing.remove(); wrap = addBubble("assistant", text); }
+        else {
+          const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+          wrap.querySelector(".bubble").innerHTML = renderMarkdown(text);
+          if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
+        }
+      }
+      text += dec.decode();
+      if (text.startsWith(ERR) || !text.trim()) {
+        typing.remove();
+        if (wrap) wrap.remove();
+        giveBackLastMessage(text.startsWith(ERR) ? text.slice(ERR.length) : "The coach gave an empty answer. Please press Send again.");
+        return;
+      }
+      if (wrap) wrap.querySelector(".bubble").innerHTML = renderMarkdown(text);
+      else { typing.remove(); addBubble("assistant", text); }
+      messages.push({ role: "assistant", content: text });
       save(STORE_KEY, JSON.stringify(messages));
-      addBubble("assistant", data.reply);
     } catch (e) {
       typing.remove();
-      addBubble("assistant", "Could not reach the server. Check your internet connection and try again.", "error");
+      if (wrap) wrap.remove();
+      giveBackLastMessage("The connection was interrupted. Please press Send again.");
     } finally {
       setBusy(false);
     }
