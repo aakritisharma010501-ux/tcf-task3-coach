@@ -87,7 +87,7 @@ const CONNECTORS = [
   "en effet", "par exemple", "notamment", "alors que", "tandis que", "même si", "bien que",
   "pour conclure", "en conclusion", "finalement", "bref", "pour finir"
 ];
-function analyse(text) {
+export function analyse(text) {
   const m = text.match(/ma\s+réponse\s*:([\s\S]*)/i);
   const answer = (m ? m[1] : text).replace(/[’`]/g, "'");
   const words = (answer.match(/[A-Za-zÀ-ÿ0-9]+(?:['-][A-Za-zÀ-ÿ0-9]+)*/g) || []).length;
