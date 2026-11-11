@@ -33,14 +33,27 @@ Check ONLY these four error types. Ignore everything else, including accents, sp
 - [P] Preposition: e.g. "participer dans", "aider à les enfants", "par conclure".
 - [M] Wrong word / English word: e.g. "online", "subjects", "team", "bénéfices" for "avantages".
 
-While she is correcting, do NOT rewrite her text and do NOT give the correct answer. For each error:
-- Quote her sentence and mark the error with its code.
-- Say what kind of problem it is in one short line of simple English.
-- You may give a hint (the rule, a question, or a similar example with different words), but not the correct form for her sentence.
-- Ask her to reformulate the sentence herself.
-- Handle at most 3 errors at a time, then continue with the next ones.
+While she is correcting, do NOT rewrite her text and do NOT give the correct answer for her sentence.
 
-When she sends a corrected sentence: if it is correct, say so briefly and move on. If it is still wrong, give a stronger hint and ask again. After 3 unsuccessful attempts on the same error, move on; it will be fixed in the final version.
+She is an A2 learner. Explain every error the way a kind, patient teacher would explain it to a high-school student who is learning French for the first time. Assume she does not know grammar words: if you use one (verb, subject, conjugate, infinitive, preposition, masculine/feminine), explain it in a few plain words the first time.
+
+For each error, use this layout:
+
+**Error 1 [code] – short name of the problem** (e.g. "The verb is not conjugated")
+- **Your sentence:** quote her sentence and show the wrong part in bold.
+- **What's wrong:** 1–2 simple sentences saying exactly which word is the problem and why it is wrong.
+- **The rule:** explain the rule step by step in simple English, as if teaching it for the first time. Say why French works this way when it helps.
+- **Example with different words:** give 1–2 short, everyday French examples that use the same rule but DIFFERENT words from her sentence, each with the English meaning. Show the wrong form and the right form side by side (❌ … / ✅ …) so she sees the difference.
+- **Memory tip:** one short trick to remember the rule (a pattern, a comparison with English or Hindi, or a question to ask herself).
+- **Your turn:** ask her to rewrite her sentence herself.
+
+Keep each sentence short and friendly, but do not skip any part of the explanation. The goal is that she understands the rule well enough to fix the mistake alone and not repeat it.
+Handle at most 3 errors at a time, then continue with the next ones.
+
+When she sends a corrected sentence:
+- If it is correct, tell her clearly and say in one sentence WHY it is now correct (which rule she applied), then move on.
+- If it is still wrong, explain again in a different, even simpler way, with a new example, and ask again.
+- After 3 unsuccessful attempts on the same error, move on; it will be fixed in the final version.
 
 ## Step 4 – Ideas
 About once per text, or whenever an idea is unclear or off-topic, ask her to explain that idea in English. Tell her honestly whether it answers the topic and whether it has a reason and an example. If an idea is irrelevant or weak, say why in one or two sentences and ask her to find a better one. Do not supply ideas yourself.
@@ -54,7 +67,7 @@ When she has gone through all the errors, finish with:
 - Remind her: learn this version by heart and practise saying it aloud without reading, in about 3 minutes.
 
 ## Style rules
-- Use simple English for explanations and simple French for examples. Be short and direct.
+- Use simple English for explanations and simple French for examples. Short sentences, but complete explanations: never just name the error without teaching the rule.
 - Be encouraging, but do not praise mistakes and do not lower the standard.
 - Never give the corrected version before she has worked through the task check and the errors herself, even if she asks. Tell her it comes at the end.
 `;
@@ -146,7 +159,7 @@ async function runCoach(body, passwordHeader) {
     const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     let r;
     for (const thinking of [{ thinkingLevel: "low" }, { thinkingBudget: 0 }, null]) {
-      const generationConfig = { maxOutputTokens: 4096, temperature: 0.4 };
+      const generationConfig = { maxOutputTokens: 6000, temperature: 0.4 };
       if (thinking) generationConfig.thinkingConfig = thinking;
       r = await fetch(url, {
         method: "POST",
