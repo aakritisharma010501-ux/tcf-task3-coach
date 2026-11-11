@@ -145,7 +145,7 @@ async function runCoach(body, passwordHeader) {
   const preferred = process.env.GEMINI_MODEL || (gateway ? "gemini-3.8-flash" : "gemini-flash-lite-latest");
   const backups = gateway
     ? ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
-    : ["gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash"];
+    : ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.5-flash"];
   const models = [preferred, ...backups.filter(m => m !== preferred)];
 
   const contents = clean.map(m => ({
@@ -197,7 +197,7 @@ async function runCoach(body, passwordHeader) {
     if (r.ok) break;
     if (r.timeout) continue;                            // too slow: try the next model
     const msg = r.data?.error?.message || "";
-    const busy = [404, 429, 500, 503, 504].includes(r.status) || /high demand|overloaded|unavailable|not found/i.test(msg);
+    const busy = !(r.status === 401 || r.status === 403 || /api key/i.test(msg));
     if (!busy) break;                                   // a real error (e.g. bad key): stop and report it
     await new Promise(res => setTimeout(res, 500));
   }
@@ -207,7 +207,7 @@ async function runCoach(body, passwordHeader) {
   }
   if (!result.ok) {
     const msg = result.data?.error?.message || `Gemini API error (${result.status}).`;
-    if ([429, 500, 503, 504].includes(result.status) || /high demand|overloaded|unavailable/i.test(msg)) {
+    if (!(result.status === 401 || result.status === 403 || /api key/i.test(msg))) {
       return { status: 503, data: { error: BUSY } };
     }
     return { status: 502, data: { error: msg } };
