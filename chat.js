@@ -153,49 +153,66 @@ async function runCoach(body, passwordHeader) {
     parts: [{ text: m.content }],
   }));
 
-  // One model, with short "thinking" so the reply arrives before Netlify's time limit.
+  // Netlify stops a function after 30 seconds, so everything must finish before that.
+  // If a model does not answer in time (Google's free tier sometimes hangs), we give up on it
+  // and try the next one, instead of waiting until Netlify cuts us off.
+  const deadline = Date.now() + 26000;
+  const BUSY = "The coach is very busy right now. Please wait a minute and press Send again.";
+
+  // One model, with short "thinking" so the reply arrives quickly.
   // Newer models use thinkingLevel, older ones thinkingBudget; if one is rejected, try the next.
   async function ask(model) {
     const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    let r;
     for (const thinking of [{ thinkingLevel: "low" }, { thinkingBudget: 0 }, null]) {
+      const left = deadline - Date.now();
+      if (left < 3000) return { timeout: true };
       const generationConfig = { maxOutputTokens: 6000, temperature: 0.4 };
       if (thinking) generationConfig.thinkingConfig = thinking;
-      r = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }, contents, generationConfig }),
-      });
-      if (r.status !== 400) break;
-      const err = await r.clone().json().catch(() => ({}));
-      if (!/think/i.test(err?.error?.message || "")) break;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), Math.min(16000, left));
+      try {
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }, contents, generationConfig }),
+          signal: ctrl.signal,
+        });
+        const data = await r.json().catch(() => ({}));
+        clearTimeout(timer);
+        if (r.status === 400 && /think/i.test(data?.error?.message || "")) continue;
+        return { ok: r.ok, status: r.status, data };
+      } catch (e) {
+        clearTimeout(timer);
+        return { timeout: true };
+      }
     }
-    return r;
+    return { timeout: true };
   }
 
-  const startedAt = Date.now();
-  let res, data = {};
+  let result = null;
   for (const model of models) {
-    if (Date.now() - startedAt > 18000) break;          // stay inside Netlify's time limit
-    try { res = await ask(model); } catch (e) { continue; }
-    data = await res.json().catch(() => ({}));
-    if (res.ok) break;
-    const busy = [429, 500, 503, 504].includes(res.status) || res.status === 404 ||
-      /high demand|overloaded|unavailable|not found/i.test(data?.error?.message || "");
+    if (deadline - Date.now() < 3000) break;
+    const r = await ask(model);
+    result = r;
+    if (r.ok) break;
+    if (r.timeout) continue;                            // too slow: try the next model
+    const msg = r.data?.error?.message || "";
+    const busy = [404, 429, 500, 503, 504].includes(r.status) || /high demand|overloaded|unavailable|not found/i.test(msg);
     if (!busy) break;                                   // a real error (e.g. bad key): stop and report it
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(res => setTimeout(res, 500));
   }
 
-  if (!res) {
-    return { status: 503, data: { error: "The coach is very busy right now. Please wait a minute and press Send again." } };
+  if (!result || result.timeout) {
+    return { status: 503, data: { error: BUSY } };
   }
-  if (!res.ok) {
-    if ([429, 500, 503, 504].includes(res.status) || /high demand|overloaded|unavailable/i.test(data?.error?.message || "")) {
-      return { status: 503, data: { error: "The coach is very busy right now. Please wait a minute and press Send again." } };
+  if (!result.ok) {
+    const msg = result.data?.error?.message || `Gemini API error (${result.status}).`;
+    if ([429, 500, 503, 504].includes(result.status) || /high demand|overloaded|unavailable/i.test(msg)) {
+      return { status: 503, data: { error: BUSY } };
     }
-    const msg = data?.error?.message || `Gemini API error (${res.status}).`;
     return { status: 502, data: { error: msg } };
   }
+  const data = result.data;
 
   const reply = (data.candidates?.[0]?.content?.parts || [])
     .filter(p => typeof p.text === "string" && !p.thought)
